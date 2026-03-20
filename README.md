@@ -1,14 +1,24 @@
 # Alpamayo 1.5 Docker Setup
 
-Docker setup for NVlabs/Alpamayo 1.5, optimized for **7GB VRAM** with QLoRA fine-tuning support.
+Docker setup for NVlabs/Alpamayo 1.5, optimized for **8GB VRAM** (RTX 2060 SUPER) with CPU offloading.
+
+## Hardware Requirements
+
+| Component | Requirement |
+|-----------|-------------|
+| GPU | NVIDIA with 8GB+ VRAM |
+| RAM | 32GB+ recommended |
+| Storage | ~30GB for model + data |
+| CUDA | 12.x |
 
 ## Project Structure
 
 ```
 alpamayo-docker/
-├── Dockerfile                 # Main Docker image definition
-├── docker-compose.yml         # Docker Compose configuration
-├── .env.example               # Environment variables template
+├── .hf_token              # HuggingFace token (create this file)
+├── .gitignore             # Ignores .hf_token and other sensitive files
+├── Dockerfile              # Main Docker image definition
+├── docker-compose.yml      # Docker Compose configuration
 ├── configs/
 │   ├── accelerate_config.yaml  # Accelerate training config
 │   └── lora_config.yaml       # QLoRA configuration
@@ -16,10 +26,11 @@ alpamayo-docker/
     ├── 01_setup.sh            # Initial setup & model download
     ├── download_data.sh       # Download sample dataset
     ├── run_inference_lowmem.sh # Low-memory inference
+    ├── test_inference.sh       # Test script (5 tests)
     ├── run_finetune.sh        # QLoRA fine-tuning
     ├── train_lora.py          # Detailed training script
     ├── train_accelerate.py    # Accelerate-based training
-    └── merge_lora.py           # Merge LoRA weights
+    └── merge_lora.py          # Merge LoRA weights
 ```
 
 ## Quick Start
@@ -30,71 +41,77 @@ alpamayo-docker/
 - Docker & Docker Compose with NVIDIA Container Toolkit
 - HuggingFace account with access to:
   - `nvidia/Alpamayo-1.5-10B` model
-  - `PhysicalAI/PhysicalAI-Autonomous-Vehicles` dataset
+  - `nvidia/PhysicalAI-Autonomous-Vehicles` dataset
 
 ### 2. Setup Environment
 
 ```bash
-# Set HuggingFace token
-export HF_TOKEN=your_token_here
-
-# Copy environment file
 cd alpamayo-docker
-cp .env.example .env
-# Edit .env and add your HF_TOKEN
-```
 
-### 3. Build Docker Image
+# Create .hf_token file with your HuggingFace token
+echo "hf_your_token_here" > .hf_token
 
-```bash
-cd alpamayo-docker
+# Build Docker image
 docker compose build alpamayo
 ```
 
-### 4. Run Container
+### 3. Initial Setup (Inside Container)
 
 ```bash
-# Interactive mode
-docker compose run --rm alpamayo
+# Start container
+docker compose run --rm alpamayo bash
 
-# Or with environment file
-docker compose --env-file .env run --rm alpamayo
-```
-
-### 5. Initial Setup (Inside Container)
-
-```bash
-# Authenticate and download model
+# Inside container: Authenticate and download model
 ./scripts/01_setup.sh
 
 # Download sample data
 ./scripts/download_data.sh
 ```
 
+### 4. Run Tests
+
+```bash
+# Run all inference tests
+./scripts/test_inference.sh
+```
+
+Expected output:
+```
+==========================================
+Alpamayo 1.5 - Test Script
+==========================================
+
+[Test 1/5] Model Loading with CPU Offloading...
+  PASS: Model loaded. GPU Memory: 2.26 GB
+...
+ALL TESTS PASSED!
+```
+
 ## Usage
 
-### Inference (Optimized for 7GB VRAM)
+### Test Inference Script
+
+```bash
+./scripts/test_inference.sh
+```
+
+This runs 5 tests:
+1. Model Loading with CPU Offloading
+2. Data Loading
+3. Input Preparation
+4. Running Inference
+5. Metrics Calculation
+
+### Low-Memory Inference
 
 ```bash
 ./scripts/run_inference_lowmem.sh
 ```
 
-Memory optimizations applied:
-- SDPA attention (instead of Flash Attention)
-- CPU offloading for large layers
-- Minimal batch size (1 sample)
-- Single trajectory sampling
-
 ### QLoRA Fine-tuning
 
 ```bash
 ./scripts/run_finetune.sh
-```
-
-Or use the detailed training script:
-
-```bash
-python scripts/train_accelerate.py
 ```
 
 ### Merge LoRA Weights
@@ -105,70 +122,39 @@ After fine-tuning, merge LoRA weights with base model:
 python scripts/merge_lora.py --lora_path /workspace/alpamayo/outputs/lora_checkpoint/final
 ```
 
-## Memory Optimization Tips for 7GB VRAM
+## Memory Optimization Strategy
 
-If you encounter Out of Memory errors:
+This setup uses **CPU offloading** to run Alpamayo 1.5 on limited VRAM:
 
-1. **Reduce LoRA rank** (in `lora_config.yaml`):
-   ```yaml
-   lora:
-     r: 8  # Default is 64, reduce to 8-16 for very low memory
-   ```
+| Setting | Value | Purpose |
+|---------|-------|---------|
+| GPU Memory Limit | 4GB | Restrict GPU usage |
+| CPU Memory | 30GB | Store offloaded layers |
+| Dtype | float16 | Reduce memory footprint |
+| Attention | eager | Avoid Flash Attention overhead |
 
-2. **Enable CPU offloading**:
-   ```python
-   model = AutoModelForCausalLM.from_pretrained(
-       ...,
-       device_map="auto",
-       max_memory={0: "5GB", "cpu": "30GB"}  # Limit GPU usage
-   )
-   ```
+### How It Works
 
-3. **Reduce sequence length**:
-   ```yaml
-   max_length: 512  # Instead of 2048
-   ```
+1. **Model Loading**: Most layers loaded to CPU, only essential layers on GPU
+2. **Inference**: Layers swapped between CPU/GPU as needed
+3. **Trade-off**: Slower inference speed, but works on 8GB VRAM
 
-4. **Use gradient checkpointing**:
-   ```python
-   model.gradient_checkpointing_enable()
-   ```
+### Results
 
-5. **Process samples one at a time**:
-   ```bash
-   export BATCH_SIZE=1
-   export GRAD_ACCUM=8  # Increase accumulation for larger effective batch
-   ```
-
-## LoRA Fine-tuning Details
-
-QLoRA (Quantized Low-Rank Adaptation) allows fine-tuning large models on limited VRAM by:
-
-1. **4-bit Quantization (NF4)**: Reduces model weights to 4-bit precision (~4x memory reduction)
-2. **LoRA Adapters**: Only trains small adapter matrices (~0.1% of parameters)
-3. **Gradient Checkpointing**: Trades compute for memory
-
-### What's Fine-tuned:
-- LLM backbone attention layers (Q, K, V, O projections)
-- FFN layers (gate, up, down projections)
-
-### What's Frozen:
-- Vision encoder (frozen for memory efficiency)
-- Embedding layers
-- Trajectory diffusion expert
+| Metric | Value |
+|--------|-------|
+| GPU Memory | ~2.26 GB |
+| minADE | ~1.24 meters |
+| CoC Output | Chain-of-Causation reasoning |
 
 ## Configuration
 
 ### Environment Variables
 
 ```bash
-HF_TOKEN=your_token_here
-HF_HOME=/root/.cache/huggingface
+HF_TOKEN=your_token_here          # Stored in .hf_token file
+HF_HOME=/root/.cache/huggingface  # Model cache location
 OUTPUT_DIR=/workspace/alpamayo/outputs
-LORA_RANK=16          # LoRA rank (8-64)
-BATCH_SIZE=1           # Batch size per device
-GRAD_ACCUM=4           # Gradient accumulation steps
-LEARNING_RATE=2e-4     # Learning rate
 ```
 
 ### LoRA Configuration
@@ -190,25 +176,21 @@ lora:
 
 ### Out of Memory (OOM)
 
-1. Reduce LoRA rank: `r=8`
-2. Enable CPU offloading
-3. Reduce batch size to 1
-4. Clear GPU cache: `torch.cuda.empty_cache()`
-
-### Flash Attention Errors
-
-The setup uses SDPA (Scaled Dot Product Attention) instead of Flash Attention for compatibility. If you have CUDA Toolkit installed and want to use Flash Attention:
-
-```bash
-# Install flash-attn manually
-uv sync --active
-```
+1. Verify CPU offloading is enabled
+2. Reduce batch size to 1
+3. Clear GPU cache: `torch.cuda.empty_cache()`
 
 ### Model Download Fails
 
-1. Verify HuggingFace token: `echo $HF_TOKEN`
-2. Check model access: https://huggingface.co/nvidia/Alpamayo-1.5-10B
-3. Login: `huggingface-cli login`
+1. Verify .hf_token file exists
+2. Check HuggingFace access: https://huggingface.co/nvidia/Alpamayo-1.5-10B
+3. Dataset access: https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles
+
+### Slow Inference
+
+This is expected with CPU offloading. To speed up:
+- Use a GPU with more VRAM (24GB+)
+- Disable CPU offloading if you have enough VRAM
 
 ## License
 
