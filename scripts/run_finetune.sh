@@ -1,6 +1,6 @@
 #!/bin/bash
 # Alpamayo 1.5 - QLoRA Fine-tuning Script
-# Optimized for 7GB VRAM
+# Optimized for 8GB VRAM (RTX 2060 SUPER)
 
 set -e
 
@@ -9,14 +9,28 @@ echo "Alpamayo 1.5 - QLoRA Fine-tuning"
 echo "=========================================="
 echo ""
 echo "This script fine-tunes Alpamayo 1.5 using QLoRA"
-echo "Optimized for GPUs with limited VRAM (7GB)"
+echo "Optimized for GPUs with limited VRAM (8GB)"
 echo ""
 
-# Check environment
+# Read HF_TOKEN from file
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Check multiple possible locations
+for TOKEN_FILE in "$SCRIPT_DIR/../.hf_token" "/workspace/.hf_token" "/workspace/alpamayo-docker/.hf_token"; do
+    if [ -f "$TOKEN_FILE" ]; then
+        export HF_TOKEN="$(cat "$TOKEN_FILE")"
+        echo "HF_TOKEN loaded from $TOKEN_FILE"
+        break
+    fi
+done
+
 if [ -z "$HF_TOKEN" ]; then
-    echo "ERROR: HF_TOKEN is not set!"
-    echo "Please set your HuggingFace token:"
-    echo "  export HF_TOKEN=your_token_here"
+    echo "ERROR: HF_TOKEN file not found!"
+    echo "Checked locations:"
+    echo "  - $SCRIPT_DIR/../.hf_token"
+    echo "  - /workspace/.hf_token"
+    echo "  - /workspace/alpamayo-docker/.hf_token"
+    echo "Please create the file with your HuggingFace token."
     exit 1
 fi
 
