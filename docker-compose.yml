@@ -1,0 +1,71 @@
+services:
+  alpamayo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: alpamayo1.5:latest
+    container_name: alpamayo1.5
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - CUDA_VISIBLE_DEVICES=0
+      - HF_TOKEN=${HF_TOKEN:-}
+      - HF_HOME=/root/.cache/huggingface
+      - PYTHONPATH=/workspace/alpamayo:${PYTHONPATH:-}
+    volumes:
+      - ./src:/workspace/alpamayo/src:ro
+      - ./scripts:/workspace/alpamayo/scripts
+      - ./configs:/workspace/alpamayo/configs
+      - /storage/alpamayo/huggingface:/root/.cache/huggingface
+      - /storage/alpamayo/alpamayo-data:/workspace/alpamayo/data
+      - ${OUTPUT_DIR:-./outputs}:/workspace/alpamayo/outputs
+    working_dir: /workspace/alpamayo
+    stdin_open: true
+    tty: true
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    shm_size: '8gb'
+
+  jupyter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: alpamayo1.5:latest
+    container_name: alpamayo-jupyter
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - HF_TOKEN=${HF_TOKEN:-}
+      - HF_HOME=/root/.cache/huggingface
+      - PYTHONPATH=/workspace/alpamayo:${PYTHONPATH:-}
+      - JUPYTER_TOKEN=alpamayo123
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./src:/workspace/alpamayo/src:ro
+      - ./scripts:/workspace/alpamayo/scripts
+      - ./notebooks:/workspace/alpamayo/notebooks
+      - /storage/alpamayo/huggingface:/root/.cache/huggingface
+      - /storage/alpamayo/alpamayo-data:/workspace/alpamayo/data
+      - ${OUTPUT_DIR:-./outputs}:/workspace/alpamayo/outputs
+    working_dir: /workspace/alpamayo
+    command: jupyter notebook --ip=0.0.0.0 --port=8888 --allow-root --no-browser --NotebookApp.token='alpamayo123'
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    profiles:
+      - jupyter
+
+networks:
+  default:
+    name: alpamayo-network

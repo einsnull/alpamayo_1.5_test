@@ -1,0 +1,81 @@
+# QLoRA Fine-tuning Configuration for Alpamayo 1.5
+# Optimized for 7GB VRAM
+
+# Model Configuration
+model_name: "nvidia/Alpamayo-1.5-10B"
+model_cache_dir: "/root/.cache/huggingface/hub"
+
+# Quantization Configuration (Critical for 7GB VRAM)
+quantization:
+  enabled: true
+  load_in_4bit: true
+  load_in_8bit: false
+  bnb_4bit_compute_dtype: "bfloat16"
+  bnb_4bit_quant_type: "nf4"
+  bnb_4bit_use_double_quant: true
+
+# LoRA Configuration
+lora:
+  r: 64  # Rank - higher = more parameters, more memory
+  lora_alpha: 128  # Scaling factor
+  target_modules:
+    # Target QKV projections in the LLM backbone
+    - "q_proj"
+    - "k_proj"
+    - "v_proj"
+    - "o_proj"
+    # Target FFN layers
+    - "gate_proj"
+    - "up_proj"
+    - "down_proj"
+  lora_dropout: 0.05
+  bias: "none"
+  task_type: "CAUSAL_LM"
+
+# Training Configuration
+training:
+  output_dir: "/workspace/alpamayo/outputs/lora_checkpoint"
+  num_train_epochs: 3
+  per_device_train_batch_size: 1  # Keep at 1 for 7GB VRAM
+  gradient_accumulation_steps: 4   # Effective batch size = 4
+  learning_rate: 2e-4
+  weight_decay: 0.01
+  warmup_steps: 100
+  max_grad_norm: 0.3
+  logging_steps: 10
+  save_steps: 500
+  eval_steps: 500
+  save_total_limit: 2
+
+# Memory Optimization
+memory_optimization:
+  use_gradient_checkpointing: true
+  gradient_checkpointing_kwargs:
+    use_reentrant: false
+  enable_cpu_offload: false  # Set to true if still OOM
+  max_memory:
+    gpu: "6GB"
+    cpu: "32GB"
+  use_flash_attention: false  # Use SDPA for compatibility
+
+# Data Configuration
+data:
+  dataset_name: "PhysicalAI/PhysicalAI-Autonomous-Vehicles"
+  dataset_split: "train"
+  max_samples: 1000  # Start with small dataset
+  preprocessing_num_workers: 4
+  dataloader_num_workers: 2
+
+# Misc
+logging:
+  level: "INFO"
+  log_level: "info"
+  report_to: "tensorboard"
+
+# Generation config for evaluation
+generation:
+  max_new_tokens: 256
+  num_beams: 1
+  do_sample: true
+  temperature: 0.6
+  top_p: 0.98

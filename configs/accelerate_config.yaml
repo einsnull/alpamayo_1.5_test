@@ -1,0 +1,37 @@
+# Accelerate configuration for Alpamayo 1.5 QLoRA training
+# Optimized for 7GB VRAM single GPU
+
+compute_environment: LOCAL_MACHINE
+debug: false
+distributed_type: NO
+enable_cpu_affinity: false
+machine_rank: 0
+main_training_function: main
+mixed_precision: bf16
+num_machines: 1
+num_processes: 1
+rdzv_backend: static
+same_network: true
+tpu_env: []
+tpu_use_cluster: false
+tpu_use_sudo: false
+use_cpu: false
+
+# DDP settings
+dynamo_config: {}
+
+# Gradient checkpointing
+gradient_checkpointing: true
+gradient_checkpointing_kwargs:
+  use_reentrant: false
+
+# Tracking
+report_to:
+  - tensorboard
+
+# Session
+tracker: tensorboard
+tracker_kwargs: {}
+
+# Logger
+logger: tensorboard

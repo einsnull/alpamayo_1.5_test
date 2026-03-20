@@ -1,0 +1,33 @@
+# HuggingFace token
+.hf_token
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Outputs
+outputs/
+*.log
+
+# Model cache (if any local)
+*.safetensors
+*.bin
+*.pt
+*.onnx
+
+# OS
+.DS_Store
+Thumbs.db
