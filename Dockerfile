@@ -13,9 +13,6 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /workspace/alpamayo
 
-# Copy project files
-COPY pyproject.toml uv.lock src/ ./
-
 # Install Python dependencies (skip torch, torchvision - already in base)
 RUN pip install --upgrade pip && \
     pip install \
@@ -31,10 +28,13 @@ RUN pip install --upgrade pip && \
 RUN pip install physical-ai-av==0.2.0 || pip install physical-ai-av || true
 
 # Create directories and copy scripts
-RUN mkdir -p /workspace/alpamayo/{data,outputs,scripts,configs} \
+RUN mkdir -p /workspace/alpamayo/data /workspace/alpamayo/outputs /workspace/alpamayo/scripts /workspace/alpamayo/configs \
     /root/.cache/huggingface
 
 COPY scripts/ /workspace/alpamayo/scripts/
 COPY configs/ /workspace/alpamayo/configs/
+
+# Clean up pip artifacts
+RUN rm -f /workspace/alpamayo/=* 2>/dev/null || true
 
 CMD ["/bin/bash"]
