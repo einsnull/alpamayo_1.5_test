@@ -4,9 +4,10 @@
 
 set -e
 
-CONTAINER_NAME=$(docker compose ps -q alpamayo 2>/dev/null)
+CONTAINER_NAME="alpamayo1.5"
 
-if [ -z "$CONTAINER_NAME" ]; then
+# Check if container is running
+if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
     echo "Error: Alpamayo container is not running!"
     echo ""
     echo "Start the container first:"
